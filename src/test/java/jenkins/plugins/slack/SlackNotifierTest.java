@@ -8,8 +8,10 @@ import org.junit.Before;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 
 @RunWith(Parameterized.class)
 public class SlackNotifierTest extends TestCase {
@@ -64,6 +66,11 @@ public class SlackNotifierTest extends TestCase {
         }
 
         public boolean publish(String message, String color) {
+            return response;
+        }
+
+        @Override
+        public boolean publish(String s, String s1, List<File> list, String fileUploadUserToken ) {
             return response;
         }
 

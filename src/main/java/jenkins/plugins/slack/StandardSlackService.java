@@ -4,16 +4,23 @@ import org.apache.commons.httpclient.HttpClient;
 import org.apache.commons.httpclient.HttpStatus;
 import org.apache.commons.httpclient.methods.PostMethod;
 
+import org.apache.commons.httpclient.methods.multipart.StringPart;
 import org.json.JSONObject;
 import org.json.JSONArray;
 
+import java.util.List;
+import java.io.File;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import hudson.model.TaskListener;
 import jenkins.model.Jenkins;
 import hudson.ProxyConfiguration;
 import org.apache.commons.httpclient.UsernamePasswordCredentials;
 import org.apache.commons.httpclient.auth.AuthScope;
+import org.apache.commons.httpclient.methods.multipart.FilePart;
+import org.apache.commons.httpclient.methods.multipart.MultipartRequestEntity;
+import org.apache.commons.httpclient.methods.multipart.Part;
 
 public class StandardSlackService implements SlackService {
 
@@ -23,12 +30,16 @@ public class StandardSlackService implements SlackService {
     private String teamDomain;
     private String token;
     private String[] roomIds;
+    private String roomIdsStr;
+    private TaskListener listener;
 
-    public StandardSlackService(String teamDomain, String token, String roomId) {
+    public StandardSlackService(String teamDomain, String token, String roomId, TaskListener listener) {
         super();
         this.teamDomain = teamDomain;
         this.token = token;
         this.roomIds = roomId.split("[,; ]+");
+        this.roomIdsStr = roomId;
+        this.listener = listener;
     }
 
     public boolean publish(String message) {
@@ -36,6 +47,10 @@ public class StandardSlackService implements SlackService {
     }
 
     public boolean publish(String message, String color) {
+        return publish(message, color, null, null);
+    }
+
+    public boolean publish(String message, String color, List<File> filesToUpload, String uploadFilesUserToken) {
         boolean result = true;
         for (String roomId : roomIds) {
             String url = "https://" + teamDomain + "." + host + "/services/hooks/jenkins-ci?token=" + token;
@@ -80,6 +95,70 @@ public class StandardSlackService implements SlackService {
                 }
             } catch (Exception e) {
                 logger.log(Level.WARNING, "Error posting to Slack", e);
+                result = false;
+            } finally {
+                post.releaseConnection();
+            }
+        }
+
+        if (result == true) {
+            logger.info("Posting success, checking for files to upload: " + filesToUpload);
+            if (filesToUpload != null && filesToUpload.size() > 0) {
+                uploadFiles(filesToUpload, uploadFilesUserToken);
+            }
+        } else {
+            logger.info("Posting failed, not checking for files to upload");
+        }
+        return result;
+    }
+
+
+    public boolean uploadFiles(List<File> filesToUpload, String uploadFilesUserToken) {
+        boolean result = true;
+
+        if (filesToUpload == null || filesToUpload.size() == 0) {
+            logger.info("uploadFiles: no filesToUpload");
+            if (listener != null) listener.getLogger().println("Slack file uploader: no files to upload");
+            return false;
+        }
+
+        if (listener != null) listener.getLogger().println("Slack file uploader: uploading " +  filesToUpload.size() + " files to channels '" + roomIdsStr + "':");
+
+        for (File file : filesToUpload) {
+            String url = "https://" + host + "/api/files.upload";
+
+            if (listener != null) listener.getLogger().println("Slack file uploader:  uploading '" + file + "' to channels '" + roomIdsStr + "', " + file.length() + " bytes...");
+            HttpClient client = getHttpClient();
+            PostMethod post = new PostMethod(url);
+
+            try {
+                Part[] parts = new Part[3];
+                parts[0] = new StringPart("token", uploadFilesUserToken);
+                parts[1] = new StringPart("channels", roomIdsStr);
+                parts[2] = new FilePart("file", file);
+                post.setRequestEntity(new MultipartRequestEntity(parts, post.getParams()));
+
+                int responseCode = client.executeMethod(post);
+                String response = post.getResponseBodyAsString();
+                if(responseCode != HttpStatus.SC_OK) {
+                    logger.log(Level.WARNING, "Slack upload may have failed. Response: " + response);
+                    if (listener != null) listener.getLogger().println("Slack file uploader:  upload of file '" + file + "' errored with http response code " + responseCode + " and message: " + response);
+                    result = false;
+                } else {
+                    JSONObject responseJson = new JSONObject(response);
+                    boolean ok = responseJson.getBoolean("ok");
+                    if (ok) {
+                        logger.info("Uploading file '" + file + "' succeeded. Response: " + response);
+                        if (listener != null) listener.getLogger().println("Slack file uploader:  uploaded '" + file + "' ok.");
+                    } else {
+                        if (listener != null) listener.getLogger().println("Slack file uploader:  upload of file '" + file + "' errored, response message: " + response);
+                    }
+                }
+            } catch (Exception e) {
+                logger.log(Level.WARNING, "Exception uploading file '" + file + "' to Slack", e);
+                if (listener != null) {
+                    listener.getLogger().println("Exception uploading file '" + file + "' to Slack: " + e.toString());
+                }
                 result = false;
             } finally {
                 post.releaseConnection();

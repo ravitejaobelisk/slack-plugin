@@ -44,6 +44,8 @@ public class SlackNotifier extends Notifier {
     private CommitInfoChoice commitInfoChoice;
     private boolean includeCustomMessage;
     private String customMessage;
+    private String uploadFilesUserToken;
+    private String uploadFilesPattern;
 
     @Override
     public DescriptorImpl getDescriptor() {
@@ -124,12 +126,20 @@ public class SlackNotifier extends Notifier {
         return customMessage;
     }
 
+    public String getUploadFilesPattern() {
+        return uploadFilesPattern;
+    }
+
+    public String getUploadFilesUserToken() {
+        return uploadFilesUserToken;
+    }
+
     @DataBoundConstructor
     public SlackNotifier(final String teamDomain, final String authToken, final String room, final String buildServerUrl,
                          final String sendAs, final boolean startNotification, final boolean notifyAborted, final boolean notifyFailure,
                          final boolean notifyNotBuilt, final boolean notifySuccess, final boolean notifyUnstable, final boolean notifyBackToNormal,
                          final boolean notifyRepeatedFailure, final boolean includeTestSummary, CommitInfoChoice commitInfoChoice,
-                         boolean includeCustomMessage, String customMessage) {
+                         boolean includeCustomMessage, String customMessage, final String uploadFilesPattern, final String uploadFilesUserToken) {
         super();
         this.teamDomain = teamDomain;
         this.authToken = authToken;
@@ -148,6 +158,8 @@ public class SlackNotifier extends Notifier {
         this.commitInfoChoice = commitInfoChoice;
         this.includeCustomMessage = includeCustomMessage;
         this.customMessage = customMessage;
+        this.uploadFilesPattern = uploadFilesPattern;
+        this.uploadFilesUserToken = uploadFilesUserToken;
     }
 
     public BuildStepMonitor getRequiredMonitorService() {
@@ -179,7 +191,7 @@ public class SlackNotifier extends Notifier {
         authToken = env.expand(authToken);
         room = env.expand(room);
 
-        return new StandardSlackService(teamDomain, authToken, room);
+        return new StandardSlackService(teamDomain, authToken, room, listener);
     }
 
     @Override
@@ -263,9 +275,11 @@ public class SlackNotifier extends Notifier {
             CommitInfoChoice commitInfoChoice = CommitInfoChoice.forDisplayName(sr.getParameter("slackCommitInfoChoice"));
             boolean includeCustomMessage = "on".equals(sr.getParameter("includeCustomMessage"));
             String customMessage = sr.getParameter("customMessage");
+            String uploadFilesPattern = sr.getParameter("uploadFilesPattern");
+            String uploadFilesUserToken = sr.getParameter("uploadFilesUserToken");
             return new SlackNotifier(teamDomain, token, room, buildServerUrl, sendAs, startNotification, notifyAborted,
                     notifyFailure, notifyNotBuilt, notifySuccess, notifyUnstable, notifyBackToNormal, notifyRepeatedFailure,
-                    includeTestSummary, commitInfoChoice, includeCustomMessage, customMessage);
+                    includeTestSummary, commitInfoChoice, includeCustomMessage, customMessage, uploadFilesPattern, uploadFilesUserToken);
         }
 
         @Override
@@ -287,7 +301,7 @@ public class SlackNotifier extends Notifier {
         }
 
         SlackService getSlackService(final String teamDomain, final String authToken, final String room) {
-            return new StandardSlackService(teamDomain, authToken, room);
+            return new StandardSlackService(teamDomain, authToken, room, null);
         }
 
         @Override

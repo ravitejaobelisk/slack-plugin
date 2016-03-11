@@ -1,6 +1,7 @@
 package jenkins.plugins.slack;
 
 import hudson.EnvVars;
+import hudson.FilePath;
 import hudson.Util;
 import hudson.model.AbstractBuild;
 import hudson.model.AbstractProject;
@@ -15,10 +16,14 @@ import hudson.scm.ChangeLogSet.AffectedFile;
 import hudson.scm.ChangeLogSet.Entry;
 import hudson.tasks.test.AbstractTestResultAction;
 import hudson.triggers.SCMTrigger;
+import hudson.util.DirScanner;
+import hudson.util.FileVisitor;
 import hudson.util.LogTaskListener;
 import org.apache.commons.lang.StringUtils;
 
+import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -109,7 +114,7 @@ public class ActiveNotifier implements FineGrainedNotifier {
                 || (result == Result.SUCCESS && notifier.getNotifySuccess())
                 || (result == Result.UNSTABLE && notifier.getNotifyUnstable())) {
             getSlack(r).publish(getBuildStatusMessage(r, notifier.includeTestSummary(),
-                    notifier.includeCustomMessage()), getBuildColor(r));
+                    notifier.includeCustomMessage()), getBuildColor(r), getFilesToUpload(r), notifier.getUploadFilesUserToken());
             if (notifier.getCommitInfoChoice().showAnything()) {
                 getSlack(r).publish(getCommitList(r), getBuildColor(r));
             }
@@ -198,6 +203,41 @@ public class ActiveNotifier implements FineGrainedNotifier {
         } else {
             return "warning";
         }
+    }
+
+    private List<File> getFilesToUpload(AbstractBuild r) {
+        Result result = r.getResult();
+
+        logger.info("getFilesToUpload(): called, result: " + result);
+        
+        if (result == Result.SUCCESS) {
+            final String glob = notifier.getUploadFilesPattern();
+            logger.info("getFilesToUpload(): glob: " + glob);
+            if (glob != null && glob.length() > 0) {
+                final List<File> files = new ArrayList<File>();
+                DirScanner dc = new DirScanner.Glob(glob, null);
+                FileVisitor fv = new FileVisitor() {
+                   @Override
+                   public void visit(File f, String relativePath) {
+                       files.add(f);
+                   }
+                };
+                
+                try {
+                    FilePath workspaceFP = r.getWorkspace();
+                    File f = new File(workspaceFP.toURI().getPath());
+                    logger.info("getFilesToUpload(): scanning dir: " + f);
+                    dc.scan(f, fv);
+                    
+                    logger.info("getFilesToUpload(): files.size(): " + files.size());
+                } catch (Throwable t) {
+                    logger.severe("Could not scan files matching glob '" + glob + "'" + t);
+                }
+                return(files);
+            }
+        }
+
+        return(null);
     }
 
     String getBuildStatusMessage(AbstractBuild r, boolean includeTestSummary, boolean includeCustomMessage) {

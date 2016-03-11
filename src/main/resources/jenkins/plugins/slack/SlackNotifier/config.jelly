@@ -62,6 +62,14 @@
         <f:entry title="Project Channel" help="${rootURL}/plugin/slack/help-projectConfig-slackRoom.html">
             <f:textbox name="slackRoom" value="${instance.getRoom()}"/>
         </f:entry>
+
+        <f:entry title="Upload Files Pattern" help="${rootURL}/plugin/slack/help-projectConfig-uploadFilesPattern.html">
+            <f:textbox name="uploadFilesPattern" value="${instance.getUploadFilesPattern()}"/>
+        </f:entry>
+        <f:entry title="Upload Files User token" help="${rootURL}/plugin/slack/help-projectConfig-uploadFilesUserToken.html">
+            <f:password name="uploadFilesUserToken" value="${instance.getUploadFilesUserToken()}"/>
+        </f:entry>
+
         <f:validateButton
                 title="${%Test Connection}" progress="${%Testing...}"
                 method="testConnection" with="slackTeamDomain,slackToken,slackRoom"/>
